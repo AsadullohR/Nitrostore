@@ -1,33 +1,17 @@
-import { Component, OnInit } from "@angular/core";
+import { HttpClient } from "@angular/common/http";
+import { Component, OnDestroy, OnInit } from "@angular/core";
 import { Cart, CartItem } from "src/app/models/cart.model";
 import { CartService } from "src/app/services/cart.service";
+import { loadStripe } from "@stripe/stripe-js";
+import { Subscription } from "rxjs";
 
 @Component({
   selector: "app-cart",
   templateUrl: "./cart.component.html",
 })
-export class CartComponent implements OnInit {
-  cart: Cart = {
-    items: [
-      {
-        product: "https://via.placeholder.com/150",
-        name: "snickers",
-        price: 150,
-        quantity: 1,
-        id: 1,
-      },
-      {
-        product: "https://via.placeholder.com/150",
-        name: "snickers",
-        price: 150,
-        quantity: 3,
-        id: 2,
-      },
-    ],
-  };
-
-  dataSource: Array<CartItem> = [];
-  displayedColumns: Array<string> = [
+export class CartComponent implements OnInit, OnDestroy {
+  cart: Cart = { items: [] };
+  displayedColumns: string[] = [
     "product",
     "name",
     "price",
@@ -35,32 +19,56 @@ export class CartComponent implements OnInit {
     "total",
     "action",
   ];
-  constructor(private cartService: CartService) {}
+  dataSource: CartItem[] = [];
+  cartSubscription: Subscription | undefined;
+
+  constructor(private cartService: CartService, private http: HttpClient) {}
 
   ngOnInit(): void {
-    this.cartService.cart.subscribe((_cart: Cart) => {
+    this.cartSubscription = this.cartService.cart.subscribe((_cart: Cart) => {
       this.cart = _cart;
-      this.dataSource = this.cart.items;
+      this.dataSource = _cart.items;
     });
   }
 
-  getTotal(items: Array<CartItem>): number {
+  getTotal(items: CartItem[]): number {
     return this.cartService.getTotal(items);
-  }
-
-  onClearCart(): void {
-    this.cartService.clearCart();
-  }
-
-  onRemoveFromCart(item: CartItem): void {
-    this.cartService.removeFromCart(item);
   }
 
   onAddQuantity(item: CartItem): void {
     this.cartService.addToCart(item);
   }
 
+  onRemoveFromCart(item: CartItem): void {
+    this.cartService.removeFromCart(item);
+  }
+
   onRemoveQuantity(item: CartItem): void {
     this.cartService.removeQuantity(item);
+  }
+
+  onClearCart(): void {
+    this.cartService.clearCart();
+  }
+
+  onCheckout(): void {
+    this.http
+      .post("http://localhost:4242/checkout", {
+        items: this.cart.items,
+      })
+      .subscribe(async (res: any) => {
+        let stripe = await loadStripe(
+          "pk_test_51O4kHLDBNF3PwfuVLA5H43FcAqMZbZWKyy9iTNrOF4HvFMyOmyodfvkMB36dDwjutaE9iP19z5NLXQ9FmBduCDzO00HFN7WOwj"
+        );
+        stripe?.redirectToCheckout({
+          sessionId: res.id,
+        });
+      });
+  }
+
+  ngOnDestroy() {
+    if (this.cartSubscription) {
+      this.cartSubscription.unsubscribe();
+    }
   }
 }
